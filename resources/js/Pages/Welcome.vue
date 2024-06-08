@@ -1,42 +1,119 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
+import { toRaw, computed, ref, watch } from 'vue'
+import ChartComponent from '../Components/ChartComponent.vue'
+import CardComponent from '../Components/CardComponent.vue'
+import Navbar from '../Components/Navbar.vue'
+import Footer from '../Components/Footer.vue'
+import RegionSelector from '../Components/RegionSelector.vue'
 
-defineProps({
-    canLogin: {
-        type: Boolean,
-    },
-    canRegister: {
-        type: Boolean,
-    },
-    laravelVersion: {
-        type: String,
-        required: true,
-    },
-    phpVersion: {
-        type: String,
-        required: true,
-    },
+const props = defineProps({
+  data: {
+    type: Array,
+    required: true,
+    default: () => [],
+  },
 });
 
-function handleImageError() {
-    document.getElementById('screenshot-container')?.classList.add('!hidden');
-    document.getElementById('docs-card')?.classList.add('!row-span-1');
-    document.getElementById('docs-card-content')?.classList.add('!flex-row');
-    document.getElementById('background')?.classList.add('!hidden');
+let parameter = ref([])
+const rawData = toRaw(props.data)
+const selectedRegion = ref('Bandung')
+const regionList = ref(rawData.map((x) => x.name[0]))
+const filteredData = computed(() => rawData.filter((x) => x.name[0] === selectedRegion.value))
+
+if (Array.isArray(filteredData.value) && filteredData.value.length > 0) { 
+  filteredData.value.forEach(test => {
+    parameter = test.parameter
+  });
+} else {
+  console.warn('no data')
 }
+
+const groupByDatetime = (data) => {
+  const groupedData = {};
+  
+  data.forEach(item => {
+    item.timerange.forEach(entry => {
+      const datetime = entry["@attributes"]["datetime"];
+      
+      if (!groupedData[datetime]) {
+        groupedData[datetime] = {};
+      }
+      
+      const attributeId = item["@attributes"]["id"];
+      const value = entry.value;
+      groupedData[datetime][attributeId] = value;
+    });
+  });
+  
+  Object.keys(groupedData).forEach(datetime => {
+    data.forEach(item => {
+      const attributeId = item["@attributes"]["id"];
+      if (!groupedData[datetime][attributeId]) {
+        groupedData[datetime][attributeId] = null;
+      }
+    });
+  });
+  
+  return groupedData;
+};
+
+
+const groupedData = groupByDatetime(parameter);
+
+let dataArray = Object.entries(groupedData).map(([datetime, attributes]) => {
+  return {
+    datetime,
+    ...attributes
+  };
+});
+
+const handleRegionChange = (region) => {
+  selectedRegion.value = region;
+  let newArr = rawData.filter((x) => x.name[0] === selectedRegion.value)
+  let param = {}
+  if (Array.isArray(newArr) && newArr.length > 0) { 
+    newArr.forEach(x => {
+      param = x.parameter
+    });
+  } else {
+    console.warn('no data')
+  }
+    let newGroup = groupByDatetime(param)
+
+    dataArray = Object.entries(newGroup).map(([datetime, attributes]) => {
+    return {
+      datetime,
+      ...attributes
+    };
+  });
+};
 </script>
 
 <template>
-    <Head title="Welcome" />
-    <div>
-      <div class="text-white">
-          <div
-              class="flex items-start gap-4 rounded-lg bg-white p-6 shadow-[0px_14px_34px_0px_rgba(0,0,0,0.08)] ring-1 ring-white/[0.05] lg:pb-10 dark:bg-zinc-900 dark:ring-zinc-800"
-          >
-              <div class="pt-3 sm:pt-5">
-                  <h1>Information</h1>
-              </div>
-          </div>
+  <Head title="Welcome" />
+  <div>
+    <Navbar />
+    <div class="flex justify-center gap-4 rounded-lg p-6 flex-col">
+      <div class="flex justify-end">
+        <RegionSelector 
+            :regionList="regionList" 
+            :selectedRegion="selectedRegion" 
+            :onRegionChange="handleRegionChange" 
+          />
       </div>
+      <div class="flex flex-col gap-3 pt-3 sm:pt-5">
+        <div class="flex justify-center font-bold text-[40px]">{{ selectedRegion }}</div>
+        <div class="flex flex-wrap gap-2 justify-center">
+          <div class="w-64" v-for="(item, index) in dataArray" :key="index">
+            <CardComponent :data="item" />
+          </div>
+        </div>
+      </div>
+      <div class="flex bg-gray-300 justify-center rounded-lg p-3 backdrop-filter backdrop-blur-sm bg-opacity-10 shadow-lg">
+        <ChartComponent :weatherData="dataArray" />
+      </div>
+      </div>
+      <Footer />
     </div>
 </template>
